@@ -32,6 +32,12 @@ class BuchiAutomata (object):
     def get_automata(self):
         pass
 
+# product automata
+class ProductAutomata (object):
+    def __init__(self):
+        pass
+
+
 # sample a state from the region
 def sample():
     pass
@@ -56,4 +62,8 @@ def update_pa():
 def add_state():
     pass
 
+# update the connected components in product 
+# automaton on adding a transition
+def update_scc():
+    pass
 
