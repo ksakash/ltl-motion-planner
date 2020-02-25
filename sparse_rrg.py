@@ -8,6 +8,30 @@ D = []
 # set of regions
 R = []
 
+# DTS
+class DTS (object):
+    def __init__(self):
+        self.X = [] # set of states
+        self.x_0 = None # initial states
+        self.delta = [] # set of transitions
+        self.pi = [] # set of observations
+    
+    # add a transition to system
+    def update_transition(self, transition):
+        self.delta.append(transition)
+
+    # gives the observation corresponding to that state
+    def observation(self, x):
+        pass
+
+# buchi automata
+class BuchiAutomata (object):
+    def __init__(self):
+        pass
+
+    def get_automata(self):
+        pass
+
 # sample a state from the region
 def sample():
     pass
