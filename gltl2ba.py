@@ -1,10 +1,49 @@
 #!/usr/bin/env python3
 
+from graphviz.dot import Digraph
 from subprocess import Popen, PIPE
 import re
 import argparse
 import sys
 import __main__
+
+
+#
+# draw graph of Buchi Automaton
+#
+
+
+class Graph:
+    def __init__(self):
+        self.dot = Digraph()
+
+    def title(self, str):
+        self.dot.graph_attr.update(label=str)
+
+    def node(self, name, label, accepting=False):
+        num_peripheries = '2' if accepting else '1'
+        self.dot.node(name, label, shape='circle', peripheries=num_peripheries)
+
+    def edge(self, src, dst, label):
+        self.dot.edge(src, dst, label)
+
+    def show(self):
+        self.dot.render(view=True)
+
+    def save_render(self, path, on_screen):
+        self.dot.render(path, view=on_screen)
+
+    def save_dot(self, path):
+        self.dot.save(path)
+
+    def __str__(self):
+        return str(self.dot)
+
+
+#
+# parser for ltl2ba output
+#
+
 
 class Ltl2baParser:
     prog_title = re.compile('^never\s+{\s+/\* (.+?) \*/$')
@@ -13,7 +52,8 @@ class Ltl2baParser:
     prog_skip = re.compile('^\s+(?:skip)$')
     prog_ignore = re.compile('(?:^\s+do)|(?:^\s+if)|(?:^\s+od)|'
                              '(?:^\s+fi)|(?:})|(?:^\s+false);?$')
-    g = dict()
+    ba = dict()
+    final_states = []
 
     @staticmethod
     def parse(ltl2ba_output, ignore_title=True):
@@ -22,28 +62,36 @@ class Ltl2baParser:
         for line in ltl2ba_output.split('\n'):
             if Ltl2baParser.is_title(line):
                 title = Ltl2baParser.get_title(line)
-                # print ("The title is: ", title)
+                if not ignore_title:
+                    graph.title(title)
             elif Ltl2baParser.is_node(line):
                 name, label, accepting = Ltl2baParser.get_node(line)
-                # print ("name: ", name, " label: ", label, " accepting: ", accepting)
+                graph.node(name, label, accepting)
                 src_node = name
             elif Ltl2baParser.is_edge(line):
                 dst_node, label = Ltl2baParser.get_edge(line)
                 assert src_node is not None
-                # print ("src_node: ", src_node, " dst_node: ", dst_node, " label: ", label)
-                if src_node not in Ltl2baParser.g:
+                graph.edge(src_node, dst_node, label)
+                if src_node not in Ltl2baParser.ba:
                     s = dict()
                     s[label] = []
                     s[label].append(dst_node)
-                    Ltl2baParser.g[src_node] = s
+                    Ltl2baParser.ba[src_node] = s
+                    temp = dst_node.split('_')
+                    if temp[0] == 'accept' and temp[1] not in Ltl2baParser.final_states:
+                        Ltl2baParser.final_states.append (temp[1])
                 else:
-                    if label not in Ltl2baParser.g[src_node]:
-                        Ltl2baParser.g[src_node][label] = []
-                        Ltl2baParser.g[src_node][label].append(dst_node)
+                    if label not in Ltl2baParser.ba[src_node]:
+                        Ltl2baParser.ba[src_node][label] = []
+                        Ltl2baParser.ba[src_node][label].append(dst_node)
                     else:
-                        Ltl2baParser.g[src_node][label].append(dst_node)
+                        Ltl2baParser.ba[src_node][label].append(dst_node)
+                    temp = dst_node.split('_')
+                    if temp[0] == 'accept' and temp[1] not in Ltl2baParser.final_states:
+                        Ltl2baParser.final_states.append (temp[1])
             elif Ltl2baParser.is_skip(line):
                 assert src_node is not None
+                graph.edge(src_node, src_node, "(1)")
             elif Ltl2baParser.is_ignore(line):
                 pass
             else:
@@ -51,7 +99,7 @@ class Ltl2baParser:
                 raise ValueError("{}: invalid input:\n{}"
                                  .format(Ltl2baParser.__name__, line))
 
-        return g
+        return graph, Ltl2baParser.ba, Ltl2baParser.final_states
 
     @staticmethod
     def is_title(line):
@@ -92,6 +140,11 @@ class Ltl2baParser:
         return Ltl2baParser.prog_ignore.match(line) is not None
 
 
+#
+# main
+#
+
+
 def gltl2ba():
     args = parse_args()
 
@@ -103,7 +156,8 @@ def gltl2ba():
 
         print(output)
 
-        if (True):
+        if (args.graph or args.output_graph is not None
+                or args.dot or args.output_dot is not None):
 
             prog = re.compile("^[\s\S\w\W]*?"
                               "(never\s+{[\s\S\w\W]+?})"
@@ -111,8 +165,23 @@ def gltl2ba():
             match = prog.search(output)
             assert match, output
 
-            graph = Ltl2baParser.parse(match.group(1))
-            print(graph)
+            graph, ba, ba_fs = Ltl2baParser.parse(match.group(1))
+
+            print (ba)
+            print (ba_fs)
+            print (ba.keys())
+
+            if args.output_graph is not None:
+                graph.save_render(args.output_graph.name, args.graph)
+                args.output_graph.close()
+            elif args.graph:
+                graph.show()
+
+            if args.output_dot is not None:
+                graph.save_dot(args.output_dot.name)
+                args.output_dot.close()
+            if args.dot:
+                print(graph)
 
     else:
         eprint("{}: ltl2ba error:".format(__main__.__file__))
@@ -209,5 +278,11 @@ def run_ltl2ba(args, ltl):
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
-if __name__ == '__main__':
+
+#
+#
+#
+
+
+if (__name__ == '__main__'):
     gltl2ba()
